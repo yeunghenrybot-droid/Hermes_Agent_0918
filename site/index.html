@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Todo List</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f172a;--surface:#1e293b;--card:#334155;
+    --text:#f1f5f9;--muted:#94a3b8;--accent:#0ea5e9;
+    --accent-light:#38bdf8;--green:#10b981;--red:#ef4444;
+    --radius:12px;--shadow:0 4px 24px rgba(0,0,0,.3);
+  }
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:var(--bg);color:var(--text);
+    min-height:100vh;display:flex;justify-content:center;
+    padding:2rem 1rem;
+  }
+  .app{width:100%;max-width:580px}
+
+  /* ── Header ── */
+  .header{margin-bottom:1.5rem}
+  .header h1{font-size:2rem;font-weight:700;letter-spacing:-.02em}
+  .header p{color:var(--muted);font-size:.9rem;margin-top:.25rem}
+
+  /* ── Input row ── */
+  .input-row{display:flex;gap:.5rem;margin-bottom:1.25rem}
+  .input-row input{
+    flex:1;padding:.85rem 1rem;border:2px solid var(--card);
+    border-radius:var(--radius);background:var(--surface);
+    color:var(--text);font-size:1rem;outline:none;
+    transition:border-color .2s;
+  }
+  .input-row input:focus{border-color:var(--accent)}
+  .input-row input::placeholder{color:var(--muted)}
+  .input-row button{
+    padding:.85rem 1.25rem;border:none;border-radius:var(--radius);
+    background:var(--accent);color:#fff;font-size:1rem;
+    font-weight:600;cursor:pointer;transition:background .2s,transform .1s;
+  }
+  .input-row button:hover{background:var(--accent-light)}
+  .input-row button:active{transform:scale(.97)}
+
+  /* ── Filters ── */
+  .filters{display:flex;gap:.5rem;margin-bottom:1rem}
+  .filters button{
+    padding:.45rem 1rem;border:2px solid var(--card);
+    border-radius:999px;background:transparent;color:var(--muted);
+    font-size:.82rem;font-weight:600;cursor:pointer;
+    transition:all .2s;
+  }
+  .filters button.active,.filters button:hover{
+    border-color:var(--accent);color:var(--accent);
+    background:rgba(14,165,233,.1);
+  }
+  .stats{font-size:.82rem;color:var(--muted);margin-bottom:1rem;
+    display:flex;justify-content:space-between}
+
+  /* ── Task list ── */
+  .task-list{list-style:none;display:flex;flex-direction:column;gap:.5rem}
+
+  .task{
+    display:flex;align-items:center;gap:.75rem;
+    padding:.85rem 1rem;background:var(--surface);
+    border:2px solid transparent;border-radius:var(--radius);
+    transition:border-color .2s,opacity .3s,transform .3s;
+    animation:slideIn .3s ease;
+  }
+  .task:hover{border-color:var(--card)}
+  .task.done{opacity:.5}
+  .task.done .task-text{text-decoration:line-through}
+  .task.removing{opacity:0;transform:translateX(40px)}
+  @keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+  /* checkbox */
+  .check{
+    width:22px;height:22px;min-width:22px;border-radius:6px;
+    border:2px solid var(--muted);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .2s;background:transparent;
+  }
+  .check:hover{border-color:var(--accent)}
+  .task.done .check{background:var(--green);border-color:var(--green)}
+  .check svg{width:13px;height:13px;stroke:#fff;stroke-width:3;fill:none;opacity:0;transition:opacity .2s}
+  .task.done .check svg{opacity:1}
+
+  .task-text{flex:1;font-size:.95rem;line-height:1.4}
+
+  .del{
+    width:30px;height:30px;min-width:30px;border:none;border-radius:8px;
+    background:transparent;color:var(--muted);font-size:1.1rem;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:all .2s;
+  }
+  .del:hover{background:rgba(239,68,68,.15);color:var(--red)}
+
+  /* empty state */
+  .empty{
+    text-align:center;padding:3rem 1rem;color:var(--muted);
+    font-size:.95rem;animation:slideIn .4s ease;
+  }
+  .empty .icon{font-size:3rem;margin-bottom:.75rem;opacity:.4}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>📋 我的待辦事項</h1>
+    <p id="date"></p>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="input" placeholder="加入新任務…" autocomplete="off">
+    <button id="addBtn">＋ 加入</button>
+  </div>
+
+  <div class="filters">
+    <button class="active" data-filter="all">全部</button>
+    <button data-filter="active">進行中</button>
+    <button data-filter="done">已完成</button>
+  </div>
+
+  <div class="stats">
+    <span id="count"></span>
+    <span id="doneCount"></span>
+  </div>
+
+  <ul class="task-list" id="list"></ul>
+  <div class="empty" id="empty" style="display:none">
+    <div class="icon">🎉</div>
+    <p id="emptyMsg">暫無任務，加入一個開始吧！</p>
+  </div>
+</div>
+
+<script>
+// ── State ──
+const KEY = 'todo_tasks';
+let tasks = JSON.parse(localStorage.getItem(KEY) || '[]');
+let filter = 'all';
+
+// ── DOM refs ──
+const $input   = document.getElementById('input');
+const $addBtn  = document.getElementById('addBtn');
+const $list    = document.getElementById('list');
+const $empty   = document.getElementById('empty');
+const $emptyMsg= document.getElementById('emptyMsg');
+const $count   = document.getElementById('count');
+const $doneEl  = document.getElementById('doneCount');
+const $filters = document.querySelectorAll('.filters button');
+document.getElementById('date').textContent =
+  new Date().toLocaleDateString('zh-Hant-HK',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+// ── Persistence ──
+function save(){ localStorage.setItem(KEY, JSON.stringify(tasks)); }
+
+// ── Render ──
+function render(){
+  const visible = tasks.filter(t =>
+    filter==='all' ? true : filter==='done' ? t.done : !t.done
+  );
+  $list.innerHTML = '';
+  visible.forEach(t => $list.appendChild(taskEl(t)));
+
+  const shown = visible.length;
+  const total = tasks.length;
+  const done  = tasks.filter(t=>t.done).length;
+
+  $empty.style.display = shown ? 'none' : '';
+  if(total===0)        $emptyMsg.textContent='暫無任務，加入一個開始吧！';
+  else if(filter==='done' && !done) $emptyMsg.textContent='尚未完成任何任務';
+  else if(filter==='active' && done===total) $emptyMsg.textContent='全部完成，好棒！👏';
+  else $emptyMsg.textContent='暫無任務';
+
+  $count.textContent  = `${total} 項任務`;
+  $doneEl.textContent = done ? `已完成 ${done}/${total}` : '';
+}
+
+function taskEl(t){
+  const li = document.createElement('li');
+  li.className = 'task' + (t.done ? ' done' : '');
+  li.dataset.id = t.id;
+
+  const chk = document.createElement('button');
+  chk.className = 'check';
+  chk.setAttribute('aria-label','切換完成狀態');
+  chk.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="4 12 10 18 20 6"/></svg>';
+  chk.onclick = () => toggle(t.id);
+
+  const txt = document.createElement('span');
+  txt.className = 'task-text';
+  txt.textContent = t.text;
+  txt.ondblclick = () => editTask(t.id, txt);
+
+  const del = document.createElement('button');
+  del.className = 'del';
+  del.setAttribute('aria-label','刪除');
+  del.textContent = '✕';
+  del.onclick = () => remove(t.id, li);
+
+  li.append(chk, txt, del);
+  return li;
+}
+
+// ── Actions ──
+function addTask(){
+  const text = $input.value.trim();
+  if(!text) return;
+  tasks.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), text, done:false });
+  $input.value = '';
+  save(); render();
+}
+
+function toggle(id){
+  const t = tasks.find(t=>t.id===id);
+  if(t){ t.done = !t.done; save(); render(); }
+}
+
+function remove(id, el){
+  el.classList.add('removing');
+  setTimeout(()=>{
+    tasks = tasks.filter(t=>t.id!==id);
+    save(); render();
+  }, 280);
+}
+
+function editTask(id, span){
+  const t = tasks.find(t=>t.id===id);
+  if(!t) return;
+  const old = t.text;
+  span.contentEditable = true;
+  span.focus();
+  document.getSelection().selectAllChildren(span);
+  const finish = commit => {
+    span.contentEditable = false;
+    if(commit){
+      const nv = span.textContent.trim();
+      t.text = nv || old;
+      save();
+    }
+    render();
+  };
+  span.onblur = () => finish(true);
+  span.onkeydown = e => {
+    if(e.key==='Enter'){ e.preventDefault(); span.blur(); }
+    if(e.key==='Escape') span.textContent = old;
+  };
+}
+
+// ── Filter buttons ──
+$filters.forEach(btn => btn.onclick = () => {
+  $filters.forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  filter = btn.dataset.filter;
+  render();
+});
+
+// ── Events ──
+$addBtn.onclick = addTask;
+$input.addEventListener('keydown', e => { if(e.key==='Enter') addTask(); });
+
+// ── Init ──
+save(); render();
+</script>
+</body>
+</html>
