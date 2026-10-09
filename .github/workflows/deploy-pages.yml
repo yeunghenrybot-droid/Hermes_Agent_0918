@@ -41,6 +41,10 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Enable the Pages site via the workflow's own job permissions
+          # (pages: write + id-token: write) — the PAT has no Pages scope.
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
